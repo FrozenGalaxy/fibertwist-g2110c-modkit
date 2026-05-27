@@ -1,3 +1,5 @@
+**Language:** English | [Deutsch](README.de.md)
+
 # Genexis FiberTwist G2110C Modkit
 
 Startup scripts, notes, and small helper tools for the **Genexis FiberTwist G2110C** ONT.
