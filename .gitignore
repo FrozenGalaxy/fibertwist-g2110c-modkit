@@ -1,0 +1,6 @@
+*.o
+*.elf
+*.bin
+/diag_to_json
+/ont_json_httpd
+.DS_Store

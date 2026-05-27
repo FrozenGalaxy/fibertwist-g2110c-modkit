@@ -1,0 +1,36 @@
+GNU Affero General Public License v3.0 only
+==========================================
+
+Copyright (C) 2026 FrozenGalaxy
+
+This project is licensed under the GNU Affero General Public License version 3 only.
+
+SPDX-License-Identifier: AGPL-3.0-only
+
+The full license text is available from the GNU Project:
+
+    https://www.gnu.org/licenses/agpl-3.0.txt
+
+Repository-specific notes
+-------------------------
+
+The intended license is AGPL-3.0-only for all original source code, scripts,
+and documentation in this repository unless a file explicitly states otherwise.
+
+This license covers only original material in this repository. It does not grant
+rights to third-party firmware, vendor binaries, Realtek SDK components, Genexis
+trademarks, ISP network identifiers, GPON/OMCI identities, or any other material
+not owned by this repository's contributors.
+
+Device-access notes
+-------------------
+
+This repository documents research and code for hardware owned/administered by
+the user. The license of this repository does not override local law, ISP terms,
+network authorization requirements, or third-party rights.
+
+No warranty
+-----------
+
+This software and documentation are provided without warranty of any kind. Use at
+your own risk.

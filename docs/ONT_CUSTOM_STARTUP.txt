@@ -1,0 +1,51 @@
+ONT custom startup notes
+========================
+
+Persistent writable storage:
+  /var/config is YAFFS2 mounted from /dev/mtdblock3 and survives reboot.
+
+Non-persistent storage:
+  /var, /var/tmp and /tmp are RAM-backed and are recreated on reboot.
+
+Read-only firmware:
+  /etc/init.d is on the squashfs root filesystem and is not persistently writable.
+
+Boot path:
+  BusyBox init runs /etc/init.d/rcS.
+  rcS executes /etc/init.d/rc0 through rc63 in numeric order.
+  rc2 mounts /var/config.
+  rc3 starts the Realtek SDK, OMCI, BOSA and LAN services.
+  rc35 runs late and explicitly calls:
+    /var/config/run_test.sh >/dev/null 2>&1
+
+Chosen hook:
+  /var/config/run_test.sh is the persistent vendor-provided late startup hook.
+
+Local layout:
+  /var/config/ont_custom.conf       editable config
+  /var/config/run_test.sh           tiny rc35 entrypoint
+  /var/config/ont_startup.sh        main startup logic
+  /var/config/ont_http_start.sh     optional JSON HTTP server starter
+  /var/config/ont_startup.log       persistent log
+
+Current custom actions:
+  - optionally wait for br0
+  - optionally add 192.168.100.1/24 to br0
+  - optionally delete the unwanted policy rule: iif br0 lookup table 252
+  - optionally recreate a configured UID 0 user in /var/passwd
+  - optionally start ont_json_httpd
+
+Config:
+  Edit /var/config/ont_custom.conf.
+
+Reason for not editing /etc/init.d:
+  /etc/init.d is read-only squashfs. Changes there do not persist.
+
+Reason for not using /var/tmp:
+  /var/tmp is RAM-backed and recreated every boot.
+
+Reason for not using run_customized_sdk.sh:
+  It exists in /var/config, but on this firmware it runs too early/unreliably for br0 management work.
+  rc35 -> run_test.sh is later and has been verified from the boot scripts.
+
+Initial installation is serial-first. SSH commands in the README are only valid after run_test.sh has been installed from serial and the ONT has rebooted.
