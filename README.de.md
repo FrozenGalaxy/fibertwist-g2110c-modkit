@@ -198,7 +198,7 @@ export MIPS_CC=/path/to/mips-buildroot-linux-uclibc-gcc
 `diag_to_json` bauen:
 
 ```sh
-$MIPS_CC -mips1 -EB -msoft-float -mno-mips16 -O2 -Wall -Wextra -Wl,--dynamic-linker=/lib/ld-uClibc.so.0 -o diag_to_json src/diag_to_json_v5.c
+$MIPS_CC -mips1 -EB -msoft-float -mno-mips16 -O2 -Wall -Wextra -Wl,--dynamic-linker=/lib/ld-uClibc.so.0 -o diag_to_json src/diag_to_json.c
 ```
 
 `ont_json_httpd` bauen:
@@ -299,7 +299,7 @@ LAN :8090 -> ONT 192.168.100.1:8090
 │   ├── ont_startup.sh
 │   └── run_test.sh
 └── src/
-    ├── diag_to_json_v5.c
+    ├── diag_to_json.c
     └── ont_json_httpd.c
 ```
 

@@ -1,14 +1,14 @@
-/* diag_to_json_v5.c - Realtek ONT read-only diagnostics as JSON.
+/* diag_to_json.c - Realtek ONT read-only diagnostics as JSON.
  *
  * Purpose:
  *   Run as:
  *     # diag_to_json
  *
  * It does not execute vendor diag. It talks directly to the same Realtek
- * socket/getsockopt backends that were verified in mydiag_all_v6.
+ * socket/getsockopt backends.
  *
  * Build:
- *   $HOME/buildroot-ont/output/host/bin/mips-buildroot-linux-uclibc-gcc -mips1 -EB -msoft-float -mno-mips16 -O2 -Wall -Wextra -Wl,--dynamic-linker=/lib/ld-uClibc.so.0 -o diag_to_json diag_to_json_v5.c
+ *   $HOME/buildroot-ont/output/host/bin/mips-buildroot-linux-uclibc-gcc -mips1 -EB -msoft-float -mno-mips16 -O2 -Wall -Wextra -Wl,--dynamic-linker=/lib/ld-uClibc.so.0 -o diag_to_json diag_to_json.c
  */
 #include <errno.h>
 #include <limits.h>
@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <time.h>
 #include <unistd.h>
 
 #define RTK_SOCK_PROTO 0xff
@@ -214,6 +215,173 @@ static void json_string(const char *s) {
     }
     putchar('"');
 }
+
+
+static int read_proc_uptime_token(char *out, size_t outn) {
+    FILE *f;
+    int c;
+    size_t n = 0;
+
+    if (outn == 0) return -1;
+    out[0] = '\0';
+
+    f = fopen("/proc/uptime", "r");
+    if (!f) return -1;
+
+    while ((c = fgetc(f)) != EOF) {
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r') break;
+        if (n + 1 < outn) out[n++] = (char)c;
+    }
+
+    fclose(f);
+
+    if (n == 0) return -1;
+    out[n] = '\0';
+    return 0;
+}
+
+static void emit_runtime(void) {
+    time_t now;
+    struct tm *tmv;
+    char iso[32];
+    char uptime[32];
+
+    now = time(NULL);
+
+    fputs("  \"runtime\": {\n", stdout);
+
+    fputs("    \"generated_unix\": ", stdout);
+    if (now == (time_t)-1) fputs("null", stdout);
+    else printf("%ld", (long)now);
+    fputs(",\n", stdout);
+
+    fputs("    \"generated_utc\": ", stdout);
+    tmv = (now == (time_t)-1) ? NULL : gmtime(&now);
+    if (tmv && strftime(iso, sizeof(iso), "%Y-%m-%dT%H:%M:%SZ", tmv) > 0) json_string(iso);
+    else fputs("null", stdout);
+    fputs(",\n", stdout);
+
+    fputs("    \"uptime_seconds\": ", stdout);
+    if (read_proc_uptime_token(uptime, sizeof(uptime)) == 0) fputs(uptime, stdout);
+    else fputs("null", stdout);
+    fputs("\n", stdout);
+
+    fputs("  }", stdout);
+}
+
+
+static int read_first_line(const char *path, char *out, size_t outn) {
+    FILE *f;
+    int c;
+    size_t n = 0;
+
+    if (outn == 0) return -1;
+    out[0] = '\0';
+
+    f = fopen(path, "r");
+    if (!f) return -1;
+
+    while ((c = fgetc(f)) != EOF) {
+        if (c == '\n' || c == '\r') break;
+        if (n + 1 < outn) out[n++] = (char)c;
+    }
+
+    fclose(f);
+
+    if (n == 0) return -1;
+    out[n] = '\0';
+    return 0;
+}
+
+static long read_meminfo_kb_value(const char *wanted_key) {
+    FILE *f;
+    char key[64];
+    long value;
+    char unit[16];
+
+    f = fopen("/proc/meminfo", "r");
+    if (!f) return -1;
+
+    while (fscanf(f, "%63[^:]: %ld %15s\n", key, &value, unit) == 3) {
+        if (strcmp(key, wanted_key) == 0) {
+            fclose(f);
+            return value;
+        }
+    }
+
+    fclose(f);
+    return -1;
+}
+
+static void json_long_or_null(long v) {
+    if (v < 0) fputs("null", stdout);
+    else printf("%ld", v);
+}
+
+static void emit_system(void) {
+    char line[256];
+    char one[32], five[32], fifteen[32], procs[32];
+    long last_pid = -1;
+    long mem_total;
+    long mem_free;
+    long mem_available;
+    long buffers;
+    long cached;
+    long swap_cached;
+    long active;
+    long inactive;
+
+    fputs("  \"system\": {\n", stdout);
+
+    fputs("    \"kernel_version\": ", stdout);
+    if (read_first_line("/proc/version", line, sizeof(line)) == 0) json_string(line);
+    else fputs("null", stdout);
+    fputs(",\n", stdout);
+
+    fputs("    \"loadavg\": ", stdout);
+    {
+        FILE *f = fopen("/proc/loadavg", "r");
+        if (f && fscanf(f, "%31s %31s %31s %31s %ld", one, five, fifteen, procs, &last_pid) == 5) {
+            char *slash = strchr(procs, '/');
+            fputs("{\"one\": ", stdout); fputs(one, stdout);
+            fputs(", \"five\": ", stdout); fputs(five, stdout);
+            fputs(", \"fifteen\": ", stdout); fputs(fifteen, stdout);
+            if (slash) {
+                *slash = '\0';
+                fputs(", \"running_processes\": ", stdout); fputs(procs, stdout);
+                fputs(", \"total_processes\": ", stdout); fputs(slash + 1, stdout);
+            }
+            printf(", \"last_pid\": %ld}", last_pid);
+        } else {
+            fputs("null", stdout);
+        }
+        if (f) fclose(f);
+    }
+    fputs(",\n", stdout);
+
+    mem_total = read_meminfo_kb_value("MemTotal");
+    mem_free = read_meminfo_kb_value("MemFree");
+    mem_available = read_meminfo_kb_value("MemAvailable");
+    buffers = read_meminfo_kb_value("Buffers");
+    cached = read_meminfo_kb_value("Cached");
+    swap_cached = read_meminfo_kb_value("SwapCached");
+    active = read_meminfo_kb_value("Active");
+    inactive = read_meminfo_kb_value("Inactive");
+
+    fputs("    \"memory\": {", stdout);
+    fputs("\"mem_total_kb\": ", stdout); json_long_or_null(mem_total);
+    fputs(", \"mem_free_kb\": ", stdout); json_long_or_null(mem_free);
+    fputs(", \"mem_available_kb\": ", stdout); json_long_or_null(mem_available);
+    fputs(", \"buffers_kb\": ", stdout); json_long_or_null(buffers);
+    fputs(", \"cached_kb\": ", stdout); json_long_or_null(cached);
+    fputs(", \"swap_cached_kb\": ", stdout); json_long_or_null(swap_cached);
+    fputs(", \"active_kb\": ", stdout); json_long_or_null(active);
+    fputs(", \"inactive_kb\": ", stdout); json_long_or_null(inactive);
+    fputs("}\n", stdout);
+
+    fputs("  }", stdout);
+}
+
 
 static void trim_ascii(const uint8_t *raw, size_t n, char *out, size_t outn) {
     size_t start = 0;
@@ -1351,8 +1519,6 @@ static void emit_pbo(void) {
 static void emit_meta(void) {
     fputs("  \"meta\": {\n", stdout);
     fputs("    \"tool\": \"diag_to_json\",\n", stdout);
-    fputs("    \"version\": \"3.0\",\n", stdout);
-    fputs("    \"schema\": \"diag_to_json.v5\",\n", stdout);
     fputs("    \"readonly\": true,\n", stdout);
     fputs("    \"uses_diag_binary\": false,\n", stdout);
     fputs("    \"backend\": \"Realtek getsockopt raw socket 0xff\"\n", stdout);
@@ -1663,8 +1829,8 @@ static void emit_home_assistant(void) {
     for (p = 0; p <= 6; ++p) {
         char key[32];
         int state = 0;
-        get_port_link_state(p, &link);
-        state = link ? 1 : 0;
+        link = 0;
+        if (get_port_link_state(p, &link) == 0 && link) state = 1;
         snprintf(key, sizeof(key), "port_%lu_link", (unsigned long)p);
         emit_ha_binary_sensor(key, state, "connectivity");
         fputs(p == 6 ? "\n" : ",\n", stdout);
@@ -1706,7 +1872,10 @@ static void emit_errors(void) {
 
 int main(void) {
     fputs("{\n", stdout);
-    fputs("  \"schema\": \"diag_to_json.v5\",\n", stdout);
+    emit_runtime();
+    fputs(",\n", stdout);
+    emit_system();
+    fputs(",\n", stdout);
     emit_meta();
     fputs(",\n", stdout);
     emit_health();
